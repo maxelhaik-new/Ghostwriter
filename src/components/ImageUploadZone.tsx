@@ -1,6 +1,6 @@
 import React, { useRef, useState, DragEvent, ChangeEvent } from "react";
-import { GhostwriteOptions } from "../types";
-import { SAMPLE_SCENES, SampleScene } from "../data/sampleScenes";
+import { GhostwriteOptions, SampleScene } from "../types";
+import { SAMPLE_SCENES } from "../data/sampleScenes";
 import { Translation } from "../data/i18n";
 
 interface ImageUploadZoneProps {

@@ -75,8 +75,10 @@ async function generateWithFallback(
   );
 }
 
+const apiRouter = express.Router();
+
 // Health check endpoint
-app.get("/api/health", (_req, res) => {
+apiRouter.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });
 
@@ -108,7 +110,7 @@ async function streamWithFallback(ai, params, res) {
   res.end();
 }
 
-app.post("/api/analyze-scene", async (req, res) => {
+apiRouter.post("/analyze-scene", async (req, res) => {
   try {
     const { image, options, language = "fr" } = req.body;
 
@@ -248,7 +250,7 @@ Return pure JSON conforming to the requested schema.
   }
 });
 
-app.post("/api/write-opening-stream", async (req, res) => {
+apiRouter.post("/write-opening-stream", async (req, res) => {
   try {
     const { analysis, title, options, language = "fr" } = req.body;
     const ai = getGeminiClient();
@@ -280,6 +282,7 @@ Ground the reader immediately in sensory texture. Avoid generic cliché openings
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
 
     await streamWithFallback(ai, {
       contents: promptText,
@@ -294,7 +297,7 @@ Ground the reader immediately in sensory texture. Avoid generic cliché openings
 });
 
 // Endpoint: Continue ghostwriting the next paragraph
-app.post("/api/continue-story-stream", async (req, res) => {
+apiRouter.post("/continue-story-stream", async (req, res) => {
   try {
     const { storyTitle, previousText, sceneContext, direction, language = "fr" } = req.body;
 
@@ -321,6 +324,7 @@ Write the next paragraph (120-180 words) in ${language === "fr" ? "French" : "En
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     
     await streamWithFallback(ai, {
       contents: prompt,
@@ -336,6 +340,10 @@ Write the next paragraph (120-180 words) in ${language === "fr" ? "French" : "En
     });
   }
 });
+
+// Mount router on both /api (standard) and root / (in case Vercel rewrites strip prefix)
+app.use("/api", apiRouter);
+app.use(apiRouter);
 
 // Setup Vite middleware in dev or static serving in production
 async function startServer() {
@@ -359,4 +367,9 @@ async function startServer() {
   });
 }
 
-startServer();
+// Only start standalone HTTP server in non-Vercel environments (Local / AI Studio / Cloud Run)
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
