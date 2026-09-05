@@ -3,7 +3,6 @@ import path from "path";
 import dotenv from "dotenv";
 import http from "http";
 import { GoogleGenAI, Type } from "@google/genai";
-import { createServer as createViteServer } from "vite";
 
 dotenv.config();
 
@@ -345,10 +344,17 @@ Write the next paragraph (120-180 words) in ${language === "fr" ? "French" : "En
 app.use("/api", apiRouter);
 app.use(apiRouter);
 
+// Global fallback error handler to guarantee JSON response
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("Server error:", err);
+  res.status(500).json({ error: err?.message || "Internal server error" });
+});
+
 // Setup Vite middleware in dev or static serving in production
 async function startServer() {
   const server = http.createServer(app);
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: { server } },
       appType: "spa",

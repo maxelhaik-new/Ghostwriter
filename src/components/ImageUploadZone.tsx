@@ -37,17 +37,54 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
     setIsDragging(false);
   };
 
+  const optimizeImage = (file: File, callback: (base64: string, mimeType: string) => void) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 1400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+          const optimizedBase64 = canvas.toDataURL(mimeType, 0.88);
+          callback(optimizedBase64, mimeType);
+        } else {
+          callback(e.target?.result as string, file.type);
+        }
+      };
+      img.onerror = () => {
+        callback(e.target?.result as string, file.type);
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const processFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
       alert("Please upload an image file (PNG, JPG, WEBP).");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      onImageSelected(result, file.type);
-    };
-    reader.readAsDataURL(file);
+    optimizeImage(file, (base64, mime) => {
+      onImageSelected(base64, mime);
+    });
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
