@@ -1,0 +1,6 @@
+{
+  "name": "Visual Ghostwriter",
+  "description": "Creative writing interface analyzing uploaded images to ghostwrite evocative story opening paragraphs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

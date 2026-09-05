@@ -1,0 +1,6 @@
+app.post("/api/continue-story-stream", async (req, res) => {
+  try {
+    const { storyTitle, previousText, sceneContext, direction, language = "fr" } = req.body;
+
+    if (!previousText) {
+      return res.status(400).json({ error: "Missing previous text" });
