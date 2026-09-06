@@ -5,8 +5,8 @@
   --color-brand-ink: #2C2825;
   --color-brand-accent: #B8A68B;
   
-  --font-serif: "Cormorant Garamond", serif;
-  --font-sans: "Inter", sans-serif;
+  --font-serif: "EB Garamond", Garamond, Georgia, serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "Inter", monospace;
 }
 

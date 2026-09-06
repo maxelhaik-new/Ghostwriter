@@ -121,16 +121,16 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full border border-black/10 p-6 md:p-8 rounded-sm bg-brand-bg relative">
+    <div className="flex flex-col h-full bg-white/30 p-6 md:p-8 rounded-sm relative">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-60 text-brand-ink">
-          Source Scene // Data Input
+        <h2 className="font-sans text-xs uppercase tracking-wider text-brand-ink/50 font-medium">
+          {imagePreview ? t.sceneAnalysisTitle : t.uploadButton}
         </h2>
         {imagePreview && (
           <button
             onClick={onClearImage}
             disabled={isLoading}
-            className="text-xs font-mono uppercase tracking-wider text-brand-ink hover:opacity-70 transition-opacity underline disabled:opacity-50"
+            className="text-xs font-sans text-brand-ink/70 hover:text-brand-ink transition-colors underline underline-offset-4 disabled:opacity-50"
           >
             {t.changeImage}
           </button>
@@ -144,10 +144,10 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`min-h-[220px] flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-colors border ${
+            className={`min-h-[200px] flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all rounded-sm ${
               isDragging
-                ? "border-brand-ink bg-black/5"
-                : "border-black/20 hover:border-brand-ink hover:bg-black/5"
+                ? "bg-black/[0.06]"
+                : "bg-white/50 hover:bg-white/80"
             }`}
           >
             <input
@@ -157,16 +157,16 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
               onChange={handleFileChange}
               className="hidden"
             />
-            <p className="font-serif text-xl text-brand-ink mb-2">
+            <p className="font-serif text-lg md:text-xl text-brand-ink mb-1.5">
               {t.uploadTitle}, <span className="underline decoration-1 underline-offset-4">{t.uploadSubtitle}</span>
             </p>
-            <p className="font-mono text-[0.65rem] uppercase tracking-widest opacity-50">
+            <p className="font-sans text-xs text-brand-ink/40 font-normal">
               {t.supportsText}
             </p>
           </div>
 
           <div>
-            <p className="font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-60 text-brand-ink mb-3">
+            <p className="font-sans text-xs uppercase tracking-wider text-brand-ink/50 font-medium mb-3">
               {t.sampleWorlds}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -175,15 +175,15 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
                   key={scene.id}
                   type="button"
                   onClick={() => handleSelectSample(scene)}
-                  className="group text-left border border-black/10 p-2 flex flex-col transition-colors hover:border-brand-ink"
+                  className="group text-left p-1.5 rounded-sm bg-white/40 hover:bg-white/90 flex flex-col transition-all cursor-pointer"
                 >
                   <img
                     src={scene.url}
                     alt={scene.title}
                     referrerPolicy="no-referrer"
-                    className="w-full h-16 object-cover grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500 mb-2"
+                    className="w-full h-16 object-cover grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300 rounded-xs mb-1.5"
                   />
-                  <span className="font-mono text-[0.65rem] uppercase tracking-wider text-brand-ink truncate w-full px-1">
+                  <span className="font-sans text-[0.65rem] text-brand-ink/75 group-hover:text-brand-ink truncate w-full px-1 font-medium">
                     {scene.title}
                   </span>
                 </button>
@@ -193,7 +193,7 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
         </div>
       ) : (
         <div className="flex-1 flex flex-col gap-6">
-          <div className="w-full h-[350px] bg-[#e8e4de] border border-black/10 flex items-center justify-center overflow-hidden">
+          <div className="w-full h-[320px] bg-black/5 rounded-sm flex items-center justify-center overflow-hidden">
             <img
               src={imagePreview}
               alt="Source scene"
@@ -204,14 +204,14 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-60 text-brand-ink mb-2">
+              <label className="block font-sans text-[0.7rem] uppercase tracking-wider text-brand-ink/60 font-semibold mb-2">
                 {t.tone}
               </label>
               <select
                 value={options.tone}
                 onChange={(e) => onOptionsChange({ ...options, tone: e.target.value })}
                 disabled={isLoading}
-                className="w-full text-xs font-mono uppercase tracking-wider py-2 px-3 border border-black/10 bg-transparent text-brand-ink focus:outline-none focus:border-brand-ink cursor-pointer rounded-none appearance-none"
+                className="w-full text-xs font-sans py-2.5 px-3 bg-white/60 hover:bg-white/90 focus:bg-white text-brand-ink focus:outline-none cursor-pointer rounded-sm appearance-none font-medium transition-colors"
               >
                 {t.tones.map((tOpt) => (
                   <option key={tOpt.value} value={tOpt.value}>{tOpt.label}</option>
@@ -219,14 +219,14 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-60 text-brand-ink mb-2">
+              <label className="block font-sans text-[0.7rem] uppercase tracking-wider text-brand-ink/60 font-semibold mb-2">
                 {t.pov}
               </label>
               <select
                 value={options.pov}
                 onChange={(e) => onOptionsChange({ ...options, pov: e.target.value })}
                 disabled={isLoading}
-                className="w-full text-xs font-mono uppercase tracking-wider py-2 px-3 border border-black/10 bg-transparent text-brand-ink focus:outline-none focus:border-brand-ink cursor-pointer rounded-none appearance-none"
+                className="w-full text-xs font-sans py-2.5 px-3 bg-white/60 hover:bg-white/90 focus:bg-white text-brand-ink focus:outline-none cursor-pointer rounded-sm appearance-none font-medium transition-colors"
               >
                 {t.povs.map((pOpt) => (
                   <option key={pOpt.value} value={pOpt.value}>{pOpt.label}</option>
@@ -236,7 +236,7 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
           </div>
 
           <div>
-            <label className="block font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-60 text-brand-ink mb-2">
+            <label className="block font-sans text-[0.7rem] uppercase tracking-wider text-brand-ink/60 font-semibold mb-2">
               {t.customPrompt}
             </label>
             <input
@@ -245,14 +245,14 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
               value={options.customPrompt}
               onChange={(e) => onOptionsChange({ ...options, customPrompt: e.target.value })}
               disabled={isLoading}
-              className="w-full text-sm font-serif italic py-2 px-3 border-b border-black/20 bg-transparent text-brand-ink focus:outline-none focus:border-brand-ink placeholder:text-black/30 rounded-none"
+              className="w-full text-xs font-sans py-2.5 px-3 bg-white/60 hover:bg-white/90 focus:bg-white text-brand-ink focus:outline-none placeholder:text-brand-ink/30 rounded-sm transition-colors"
             />
           </div>
 
           <button
             onClick={onSubmit}
             disabled={isLoading}
-            className="mt-4 w-full bg-brand-ink text-white py-4 px-6 text-[0.7rem] font-mono uppercase tracking-[0.1em] border-none cursor-pointer transition-opacity hover:opacity-80 disabled:opacity-50"
+            className="mt-2 w-full bg-brand-ink text-white py-3.5 px-6 text-xs font-sans uppercase tracking-wider font-semibold rounded-sm cursor-pointer transition-opacity hover:opacity-85 disabled:opacity-50"
           >
             {isLoading ? t.generating : t.generateButton}
           </button>

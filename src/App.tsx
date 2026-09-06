@@ -48,8 +48,13 @@ export default function App() {
       setErrorMessage(t.missingImageError);
       return;
     }
+    if (isLoading || isContinuing) {
+      console.warn("[App] Requête ignorée : une génération est déjà en cours.");
+      return;
+    }
     setIsLoading(true);
     setErrorMessage(null);
+    console.log("%c[App] Lancement de l'analyse et de l'écriture...", "color: #8b5cf6; font-weight: bold;");
     
     try {
       // Step 1: Get the scene analysis and metadata
@@ -67,6 +72,14 @@ export default function App() {
         throw new Error(json.error || "Failed to analyze image.");
       }
       
+      if (json.modelUsed) {
+        console.log(
+          `%c[Gemini] Modèle utilisé pour l'analyse : %c${json.modelUsed}`,
+          "color: #3b82f6; font-weight: bold;",
+          "color: #10b981; font-weight: bold;"
+        );
+      }
+
       const metaData = json.data;
       
       // Initialize result state with empty opening paragraph
@@ -81,6 +94,7 @@ export default function App() {
       setIsContinuing(true); // Re-use isContinuing for the initial stream as well to show activity
 
       // Step 2: Stream the opening paragraph
+      console.log("%c[App] Démarrage du flux d'ouverture...", "color: #8b5cf6;");
       const streamResponse = await fetch("/api/write-opening-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -93,7 +107,12 @@ export default function App() {
       });
 
       if (!streamResponse.ok || !streamResponse.body) {
-        throw new Error("Failed to start opening stream");
+        let errMsg = "Failed to start opening stream";
+        try {
+          const errData = await streamResponse.json();
+          if (errData?.error) errMsg = errData.error;
+        } catch {}
+        throw new Error(errMsg);
       }
 
       const reader = streamResponse.body.getReader();
@@ -110,20 +129,33 @@ export default function App() {
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6);
             if (dataStr === '[DONE]') continue;
+            let data: any = null;
             try {
-              const data = JSON.parse(dataStr);
-              if (data.error) throw new Error(data.error);
-              if (data.chunk) {
-                setResult(prev => {
-                  if (!prev) return prev;
-                  return {
-                    ...prev,
-                    openingParagraph: prev.openingParagraph + data.chunk
-                  };
-                });
-              }
+              data = JSON.parse(dataStr);
             } catch (e) {
               console.warn("Parse error for chunk:", e);
+              continue;
+            }
+
+            if (data?.error) {
+              throw new Error(data.error);
+            }
+
+            if (data?.modelUsed) {
+              console.log(
+                `%c[Gemini] Modèle utilisé pour l'ouverture : %c${data.modelUsed}`,
+                "color: #3b82f6; font-weight: bold;",
+                "color: #10b981; font-weight: bold;"
+              );
+            }
+            if (data?.chunk) {
+              setResult(prev => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  openingParagraph: prev.openingParagraph + data.chunk
+                };
+              });
             }
           }
         }
@@ -140,8 +172,13 @@ export default function App() {
 
   const handleContinueStory = async (direction: string) => {
     if (!result) return;
+    if (isLoading || isContinuing) {
+      console.warn("[App] Requête ignorée : une génération est déjà en cours.");
+      return;
+    }
     setIsContinuing(true);
     setErrorMessage(null);
+    console.log("%c[App] Lancement de la suite de l'histoire...", "color: #8b5cf6; font-weight: bold;");
     
     // Add empty placeholder for the new continuation
     setContinuations(prev => [...prev, ""]);
@@ -161,7 +198,12 @@ export default function App() {
       });
       
       if (!response.ok || !response.body) {
-        throw new Error("Failed to start continuation stream");
+        let errMsg = "Failed to start continuation stream";
+        try {
+          const errData = await response.json();
+          if (errData?.error) errMsg = errData.error;
+        } catch {}
+        throw new Error(errMsg);
       }
       
       const reader = response.body.getReader();
@@ -178,18 +220,31 @@ export default function App() {
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6);
             if (dataStr === '[DONE]') continue;
+            let data: any = null;
             try {
-              const data = JSON.parse(dataStr);
-              if (data.error) throw new Error(data.error);
-              if (data.chunk) {
-                setContinuations(prev => {
-                  const newArr = [...prev];
-                  newArr[newArr.length - 1] += data.chunk;
-                  return newArr;
-                });
-              }
+              data = JSON.parse(dataStr);
             } catch (e) {
               console.warn("Parse error for chunk:", e);
+              continue;
+            }
+
+            if (data?.error) {
+              throw new Error(data.error);
+            }
+
+            if (data?.modelUsed) {
+              console.log(
+                `%c[Gemini] Modèle utilisé pour la suite : %c${data.modelUsed}`,
+                "color: #3b82f6; font-weight: bold;",
+                "color: #10b981; font-weight: bold;"
+              );
+            }
+            if (data?.chunk) {
+              setContinuations(prev => {
+                const newArr = [...prev];
+                newArr[newArr.length - 1] += data.chunk;
+                return newArr;
+              });
             }
           }
         }
@@ -221,12 +276,12 @@ export default function App() {
         t={t}
       />
       {errorMessage && (
-        <div className="mb-8 p-4 border border-rose-900/20 bg-rose-900/5 flex items-center justify-between gap-3 font-mono text-xs text-rose-900 animate-fadeIn">
+        <div className="mb-8 p-4 rounded-sm bg-rose-900/10 flex items-center justify-between gap-3 font-sans text-xs text-rose-900 animate-fadeIn">
           <div className="flex items-center gap-2">
-            <strong className="tracking-wider">[ERROR]</strong>
+            <span className="font-semibold uppercase tracking-wider">Erreur :</span>
             <span>{errorMessage}</span>
           </div>
-          <button onClick={() => setErrorMessage(null)} className="uppercase tracking-wider hover:opacity-70 underline">
+          <button onClick={() => setErrorMessage(null)} className="font-sans text-xs uppercase tracking-wider hover:opacity-75 underline underline-offset-4 cursor-pointer">
             {t.dismiss}
           </button>
         </div>
@@ -261,9 +316,9 @@ export default function App() {
           />
           <StorySparksCard
             hooks={result ? result.narrativeHooks : []}
-            hiddenSecret={result ? result.hiddenSecret : ""}
             onSelectHook={(hook) => handleContinueStory(hook)}
             isLoading={isLoading}
+            isContinuing={isContinuing}
             t={t}
           />
         </div>

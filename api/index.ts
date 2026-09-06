@@ -1,6 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 dotenv.config();
 
@@ -26,14 +26,40 @@ function getGeminiClient(): GoogleGenAI {
   });
 }
 
-// Current flash models with automatic fallback on 503 high demand or 429 quota exhaustion
+// Configured models: default gemini-3.1-flash-lite (fastest, active quota), fallback to gemini-flash-latest and 3.8 flash
 const CANDIDATE_MODELS = [
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
-  "gemini-3-flash-preview",
-  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-flash-latest",
   "gemini-3.8-flash",
 ];
+
+// Helper delay for backoff between fallback attempts
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function extractCleanErrorMessage(err: any): string {
+  if (!err) return "Une erreur inattendue est survenue.";
+  let msg = err.message || String(err);
+  try {
+    const raw = typeof err.message === "string" ? err.message.trim() : "";
+    if (raw.startsWith("{")) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.error?.message) {
+        msg = parsed.error.message;
+      }
+    } else if (err.error?.message) {
+      msg = err.error.message;
+    }
+  } catch {}
+
+  if (
+    msg.includes("quota") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    err?.status === 429
+  ) {
+    return "La limite de requêtes de l'API est temporairement atteinte. Veuillez patienter quelques secondes avant de réessayer.";
+  }
+  return msg;
+}
 
 async function generateWithFallback(
   ai: GoogleGenAI,
@@ -41,23 +67,46 @@ async function generateWithFallback(
     contents: any;
     config?: any;
   },
-) {
+): Promise<{ response: any; modelUsed: string }> {
   let lastError: any = null;
 
-  for (const model of CANDIDATE_MODELS) {
+  for (let i = 0; i < CANDIDATE_MODELS.length; i++) {
+    const model = CANDIDATE_MODELS[i];
     try {
+      // Configure low thinking effort for maximum speed
+      const mergedConfig = {
+        ...params.config,
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.LOW,
+          ...(params.config?.thinkingConfig || {}),
+        },
+      };
+
       const response = await ai.models.generateContent({
         model,
         contents: params.contents,
-        config: params.config,
+        config: mergedConfig,
       });
-      return response;
+      console.log(`[Gemini Server] Requête traitée avec succès par le modèle : ${model}`);
+      return { response, modelUsed: model };
     } catch (err: any) {
       lastError = err;
-      console.warn(
-        `Model ${model} failed (trying fallback):`,
-        err?.message || err,
+      const is503Or429 =
+        err?.status === 503 ||
+        err?.status === 429 ||
+        err?.message?.includes("503") ||
+        err?.message?.includes("429") ||
+        err?.message?.includes("high demand") ||
+        err?.message?.includes("quota");
+
+      console.log(
+        `[Gemini Server] Modèle ${model} indisponible (${is503Or429 ? "pic de charge temporaire" : "statut: " + (err?.status || "erreur")}), passage au candidat suivant...`,
       );
+
+      // If we have a next candidate and hit high demand, brief pause for backoff
+      if (i < CANDIDATE_MODELS.length - 1 && is503Or429) {
+        await delay(400);
+      }
       continue;
     }
   }
@@ -77,31 +126,76 @@ apiRouter.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });
 
-// Helper for streaming Gemini responses
+// Helper for streaming Gemini responses with low latency
+let streamCallCount = 0;
+
 async function streamWithFallback(ai: any, params: any, res: any) {
+  const currentCallId = ++streamCallCount;
   let lastError = null;
-  for (const model of CANDIDATE_MODELS) {
+
+  for (let i = 0; i < CANDIDATE_MODELS.length; i++) {
+    const model = CANDIDATE_MODELS[i];
+    let chunksSent = 0;
+
     try {
+      const mergedConfig = {
+        ...params.config,
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.LOW,
+          ...(params.config?.thinkingConfig || {}),
+        },
+      };
+
       const responseStream = await ai.models.generateContentStream({
         model,
         contents: params.contents,
-        config: params.config,
+        config: mergedConfig,
       });
       
+      console.log(`[Gemini Server Stream #${currentCallId}] Flux démarré avec succès par le modèle : ${model}`);
+      // Notify client of the active model and call ID
+      res.write(`data: ${JSON.stringify({ modelUsed: model, callId: currentCallId })}\n\n`);
+
       for await (const chunk of responseStream) {
         if (chunk.text) {
+          chunksSent++;
           res.write(`data: ${JSON.stringify({ chunk: chunk.text })}\n\n`);
         }
       }
       res.write("data: [DONE]\n\n");
       res.end();
       return;
-    } catch (err) {
+    } catch (err: any) {
       lastError = err;
-      console.warn(`Model ${model} stream failed (trying fallback):`, err?.message || err);
+      
+      // If chunks were already written to the HTTP response, we cannot restart the stream with another model
+      // without corrupting/duplicating the text on the client
+      if (chunksSent > 0) {
+        console.error(`[Gemini Server Stream #${currentCallId}] Échec en cours de flux avec ${model} après ${chunksSent} morceaux. Clôture.`);
+        res.write(`data: ${JSON.stringify({ error: "Stream interrupted" })}\n\n`);
+        res.end();
+        return;
+      }
+
+      const is503Or429 =
+        err?.status === 503 ||
+        err?.status === 429 ||
+        err?.message?.includes("503") ||
+        err?.message?.includes("429") ||
+        err?.message?.includes("high demand") ||
+        err?.message?.includes("quota");
+
+      console.log(
+        `[Gemini Server Stream #${currentCallId}] Modèle ${model} indisponible (${is503Or429 ? "pic de charge temporaire" : "statut: " + (err?.status || "erreur")}), passage au candidat suivant...`,
+      );
+
+      if (i < CANDIDATE_MODELS.length - 1 && is503Or429) {
+        await delay(400);
+      }
     }
   }
-  res.write(`data: ${JSON.stringify({ error: "Failed to generate stream" })}\n\n`);
+  const errStr = extractCleanErrorMessage(lastError);
+  res.write(`data: ${JSON.stringify({ error: errStr })}\n\n`);
   res.end();
 }
 
@@ -157,7 +251,7 @@ Task:
 Return pure JSON conforming to the requested schema.
 `.trim();
 
-    const response = await generateWithFallback(ai, {
+    const { response, modelUsed } = await generateWithFallback(ai, {
       contents: {
         parts: [imagePart, { text: promptText }],
       },
@@ -234,11 +328,12 @@ Return pure JSON conforming to the requested schema.
     const jsonText = response.text || "{}";
     const parsedData = JSON.parse(jsonText);
 
-    return res.json({ success: true, data: parsedData });
+    res.setHeader("X-Model-Used", modelUsed);
+    return res.json({ success: true, data: parsedData, modelUsed });
   } catch (error: any) {
     console.error("Error in /api/analyze-scene:", error);
     return res.status(500).json({
-      error: error?.message || "Failed to analyze image and generate story.",
+      error: extractCleanErrorMessage(error),
     });
   }
 });
@@ -285,7 +380,13 @@ Ground the reader immediately in sensory texture. Avoid generic cliché openings
     }, res);
   } catch (error) {
     console.error("Error in /api/write-opening-stream:", error);
-    res.status(500).end();
+    const errStr = extractCleanErrorMessage(error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: errStr });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: errStr })}\n\n`);
+      res.end();
+    }
   }
 });
 
@@ -328,9 +429,15 @@ Write the next paragraph (120-180 words) in ${language === "fr" ? "French" : "En
     }, res);
   } catch (error: any) {
     console.error("Error in /api/continue-story:", error);
-    return res.status(500).json({
-      error: error?.message || "Failed to continue story.",
-    });
+    const errStr = extractCleanErrorMessage(error);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: errStr,
+      });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: errStr })}\n\n`);
+      res.end();
+    }
   }
 });
 
